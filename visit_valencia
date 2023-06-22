@@ -26,8 +26,8 @@ def get_trip(day: datetime, weeks=2):
         if trip.outbound.destination == 'VLC':
             # print("Destination: ", trip.outbound.destinationFull, "Price: ", "{:.2f}".format(trip.totalPrice), "From: ", trip.outbound.departureTime.strftime("%d/%m/%Y"), "To: ", trip.inbound.departureTime.strftime("%d/%m/%Y"))
             trip_info = {
-                "arrival": trip.outbound.departureTime,
-                "departure": trip.inbound.departureTime,
+                "Cork": trip.outbound.departureTime,
+                "Valencia": trip.inbound.departureTime,
                 "price": trip.totalPrice
             }
             return trip_info
