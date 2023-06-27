@@ -1,0 +1,22 @@
+#! /Library/Frameworks/Python.framework/Versions/3.11/bin/python3
+import random
+
+sentences = [
+    'your surname is next, right?',
+    'what a gentuzo',
+    'we are not in Lord of the Rings, so I hope you are not a hobbit',
+    'they call me von, py-von',
+    "I am a monkey, but I don't jump from tree to tree",
+    "it is not necessary to be a rocket scientist to know that you are next",
+    "I am not a fortune teller, but I know that you are next",
+    "I blink, you blink, we blink, you are next",
+    "I am not a magician, but I know that you are next",
+    "I am not a wizard, but I know that you are next",
+    "I hope you are a fisher because I will fall in your net",
+    "I hope you are a firefighter because I'm on fire",
+    "call the police because I will steal your heart",
+    "you can go as fast as you come to go away"
+]
+
+if __name__ == '__main__':
+    print(random.choice(sentences))
