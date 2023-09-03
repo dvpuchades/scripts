@@ -1,0 +1,60 @@
+#! /Library/Frameworks/Python.framework/Versions/3.11/bin/python3
+
+import argparse
+import re
+from datetime import datetime, timedelta, date
+
+def parse_date(string: str) -> date:
+    match = re.search(r'(.+)-(.+)+-(.+)', string)
+    return date(int(match.group(3)), int(match.group(2)), int(match.group(1)))
+
+def get_weeks(starting: date, deadline: date) -> float:
+    if starting > deadline:
+        print("ERROR: First valid day is over specified deadline")
+    return (deadline - starting).days / 7
+
+def get_next_monday() -> datetime:
+    today = datetime.today().date().weekday()
+    if today == 0:
+        return date.today()
+    else:
+        return date.today() + timedelta(days=(7 - today))
+
+def get_full_weeks(deadline: date) -> int:
+    first_monday = get_next_monday()
+    return int(get_weeks(first_monday, deadline))
+
+def get_hours(weeks: int, hours_per_week: int) -> int:
+    return weeks * hours_per_week
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Returns the number of weeks until the entered date.')
+    parser.add_argument('deadline', help="Date in dd-mm-yyyy") 
+    parser.add_argument('--complete', "-c", dest='complete', action=argparse.BooleanOptionalAction, help='Counts only full weeks, from Monday to Sunday')
+    parser.add_argument('--week_hours', type=int, help='Hours per week, if set weekday and weekend options are ignored')
+    parser.add_argument('--weekday_hours', type=int, help='Hours per weekday, only available for complete weeks')
+    parser.add_argument('--weekend_hours', type=int, help='Full weekend hours, only available for complete weeks')
+
+    args = parser.parse_args()
+    deadline = parse_date(args.deadline)
+    weeks = 0
+    if args.complete:
+        weeks = get_full_weeks(deadline)
+    else:
+        weeks = get_weeks(date.today(), deadline)
+    result = str(int(weeks)) + " weeks"
+    hours = None
+    if args.week_hours is not None:
+        hours = weeks * args.week_hours
+    else:
+        def add_possible_none(evaluated, adder, factor=1):
+            if adder is not None and evaluated is not None:
+                return evaluated + (adder * factor)
+            else:
+                return evaluated
+        hours = add_possible_none(0, args.weekday_hours, factor=5*weeks)
+        hours = add_possible_none(hours, args.weekend_hours, factor=weeks)
+
+    if hours is not None:
+        result += ", " + str(int(hours)) + " hours"
+    print(result)
