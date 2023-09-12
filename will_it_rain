@@ -1,0 +1,31 @@
+#! /Library/Frameworks/Python.framework/Versions/3.11/bin/python3
+
+# Checks weather for Cork City, Ireland from 8am to 10am and 5pm to 7pm
+
+import requests
+from datetime import datetime, date
+
+def get_precipitation():
+  url = "https://api.open-meteo.com/v1/forecast?latitude=51.898&longitude=-8.4706&hourly=precipitation&timezone=auto&forecast_days=1"
+  import requests
+  response = requests.get(url)
+  weather = response.json()
+  precipitation = 0
+  for index, hour in enumerate(weather['hourly']['time']):
+    hour = datetime.fromisoformat(hour)
+    if (8 < hour.hour < 10 or 17 < hour.hour < 19) and hour.date() == date.today():
+      precipitation += int(weather['hourly']['precipitation'][index])
+  return precipitation
+
+def advice(precipitation):
+  if precipitation > 5:
+    return "You will get wet anyway."
+  if precipitation > 1:
+    return "Take the raincoat."
+  if precipitation > 0:
+    return "It may rain"
+  return "You'll be fine."
+
+if __name__ == "__main__":
+  precipitation = get_precipitation()
+  print(advice(precipitation))
