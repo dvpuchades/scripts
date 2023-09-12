@@ -1,0 +1,55 @@
+#! /Library/Frameworks/Python.framework/Versions/3.11/bin/python3
+
+# Using open-meteo.com API
+
+# WMO Weather interpretation codes (WW)
+# Code	Description
+# 0	Clear sky
+# 1, 2, 3	Mainly clear, partly cloudy, and overcast
+# 45, 48	Fog and depositing rime fog
+# 51, 53, 55	Drizzle: Light, moderate, and dense intensity
+# 56, 57	Freezing Drizzle: Light and dense intensity
+# 61, 63, 65	Rain: Slight, moderate and heavy intensity
+# 66, 67	Freezing Rain: Light and heavy intensity
+# 71, 73, 75	Snow fall: Slight, moderate, and heavy intensity
+# 77	Snow grains
+# 80, 81, 82	Rain showers: Slight, moderate, and violent
+# 85, 86	Snow showers slight and heavy
+# 95 *	Thunderstorm: Slight or moderate
+# 96, 99 *	Thunderstorm with slight and heavy hail
+
+import requests
+from datetime import date
+
+def get_weather():
+  # gets weather data from open-meteo.com for Cork, Ireland
+  url = "https://api.open-meteo.com/v1/forecast?latitude=51.898&longitude=-8.4706&daily=weathercode,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=14"
+  response = requests.get(url)
+  return response.json()
+
+def get_weather_days(weather):
+  days = []
+  for i in range(14):
+    day = date.fromisoformat(weather['daily']['time'][i])
+    weather_code = weather['daily']['weathercode'][i]
+    max_temp = weather['daily']['temperature_2m_max'][i]
+    min_temp = weather['daily']['temperature_2m_min'][i]
+    days.append({'date': day, 'weather_code': weather_code, 'max_temp': max_temp, 'min_temp': min_temp})
+  return days
+
+def get_next_sunny_day(days):
+  for day in days:
+    if int(day['weather_code']) <= 3:
+      return day
+  return None
+
+def date_to_string(date):
+  return date.strftime('%a %d %b')
+
+if __name__ == "__main__":
+  weather = get_weather()
+  days = get_weather_days(weather)
+  next_sunny_day = get_next_sunny_day(days)
+  print(date_to_string(next_sunny_day['date'])
+        + ", " + str((next_sunny_day['date'] - date.today()).days) + " day(s) remaining. "
+        + str(next_sunny_day['max_temp']) + "°C max, " + str(next_sunny_day['min_temp']) + "°C min")
