@@ -28,9 +28,9 @@ def get_hours(weeks: int, hours_per_week: int) -> int:
     return weeks * hours_per_week
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Returns the number of weeks until the entered date.')
+    parser = argparse.ArgumentParser(description='Returns the number of full weeks until the entered date.')
     parser.add_argument('deadline', help="Date in dd-mm-yyyy") 
-    parser.add_argument('--complete', "-c", dest='complete', action=argparse.BooleanOptionalAction, help='Counts only full weeks, from Monday to Sunday')
+    parser.add_argument('--uncomplete', "-u", dest='uncomplete', action=argparse.BooleanOptionalAction, help='Counts any 7 seven days, not from Monday to Sunday')
     parser.add_argument('--week_hours', type=int, help='Hours per week, if set weekday and weekend options are ignored')
     parser.add_argument('--weekday_hours', type=int, help='Hours per weekday, only available for complete weeks')
     parser.add_argument('--weekend_hours', type=int, help='Full weekend hours, only available for complete weeks')
@@ -38,10 +38,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
     deadline = parse_date(args.deadline)
     weeks = 0
-    if args.complete:
-        weeks = get_full_weeks(deadline)
-    else:
+    if args.uncomplete:
         weeks = get_weeks(date.today(), deadline)
+    else:
+        weeks = get_full_weeks(deadline)
     result = str(int(weeks)) + " weeks"
     hours = None
     if args.week_hours is not None:
