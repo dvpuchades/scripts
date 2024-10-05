@@ -1,0 +1,119 @@
+#! /Library/Frameworks/Python.framework/Versions/3.11/bin/python3
+
+# Performs a backup of the specified directory. The specified directory
+# must contain a .vault-config file that specifies the backup destination.
+
+# .vault-config file format:
+# {
+#   "destinations": {
+#     "backup_hdd" : "Vault24",
+#     "nas" : "<path_to_backup>"
+#   },
+#   "files": {
+#     "path/to/file": [<synced_destinations>]
+#   }
+# }
+
+# Every destination path must contain a .vault file that specifies its name.
+# .vault file format:
+# {
+#   "name": "backup_hdd"
+# }
+
+# Usage: vault <directory>
+
+import argparse
+import json
+import os
+
+def backup_vault(directory):
+  # Load the .vault-config file
+  try:
+    with open(f'{directory}/.vault-config', 'r') as file:
+      vault_config = json.load(file)
+  except FileNotFoundError:
+    print('Error: .vault-config file not found.')
+    return
+  # Check which destinations are available
+  mounted_disks = os.listdir('/Volumes')
+  available_destinations = []
+  for disk in mounted_disks:
+    try:
+      with open(f'/Volumes/{disk}/.vault', 'r') as file:
+        destination_name = json.load(file)['name']
+        if destination_name in vault_config['destinations'].keys():
+          destination_vault = vault_config['destinations'][destination_name]
+          available_destinations.append(
+            (destination_name, f'/Volumes/{disk}/{destination_vault}'))
+    except FileNotFoundError:
+      pass
+  if not available_destinations:
+    print('Error: No available destinations found.')
+    return
+  # Get all the files in the directory
+
+  def get_files(directory):
+    entries = os.listdir(directory)
+    files = [os.path.join(directory, entry)
+      for entry in entries if os.path.isfile(os.path.join(directory, entry))]
+    directories = [os.path.join(directory, entry)
+      for entry in entries if os.path.isdir(os.path.join(directory, entry))]
+    for unexplored_directory in directories:
+      files += get_files(unexplored_directory)
+    return files
+
+  # Set current path to directory and scan file paths
+  os.chdir(directory)
+  files = get_files('./')
+  files.remove('./.vault-config')
+  # Check which files are synced with the available destinations
+  tracked_files = vault_config.get('files')
+  if tracked_files is None:
+    tracked_files = {}
+    vault_config['files'] = tracked_files
+  for file in files:
+    if file not in tracked_files.keys():
+      tracked_files[file] = []
+  # Sync the files with the available destinations
+  for destination, destination_path in available_destinations:
+    print(f'{destination}:')
+    if not os.path.exists(destination_path):
+      print('  - Error: Destination not found.')
+      continue # Skip this destination
+    print('  - Syncing files...')
+    for file, synced_destinations in tracked_files.items():
+      if destination not in synced_destinations:
+        new_file = os.path.join(destination_path, file[2:]) # remove './'
+        dir_new_file = os.path.dirname(new_file)
+        system_code = os.system(
+          f'mkdir -p {dir_new_file} && cp {file} {new_file}')
+        if system_code != 0:
+          print(f'  - Error: Failed to sync {file}.')
+        else:
+          tracked_files[file].append(destination)
+    print('  - Up to date.')
+    # Dump the updated .vault-config file, just in case of failure
+    with open(f'{directory}/.vault-config', 'w') as file:
+      json.dump(vault_config, file, indent=2)
+  # Check if all files are synced with all destinations
+  all_destinations = set(vault_config['destinations'].keys())
+  files_to_untrack = []
+  for file, synced_destinations in tracked_files.items():
+    if set(synced_destinations) == all_destinations:
+      # Remove the file if it is synced with all destinations
+      os.system(f'rm {file}')
+      files_to_untrack.append(file)
+  for file in files_to_untrack:
+    del tracked_files[file]
+  # Dump the updated .vault-config file
+  with open(f'{directory}/.vault-config', 'w') as file:
+    json.dump(vault_config, file, indent=2)
+
+  print('Backup complete.')
+
+if __name__ == '__main__':
+  parser = argparse.ArgumentParser(description='Performs a backup of the specified directory.')
+  parser.add_argument('directory', type=str, help='Directory containing .vault-config file')
+  args = parser.parse_args()
+  directory = args.directory
+  backup_vault(directory)
