@@ -15,26 +15,23 @@ Gets the next good weather evening in Cork City, understanding evening as the pe
 ## will_it_rain
 Advices to take an umbrella from weather forecast for 8am to 10am and 5pm to 7pm for that day,
 it works only for Cork City
+---
+# Vault
 
-##
-Performs a backup of the specified directory. The specified directory
-must contain a .vault-config file that specifies the backup destination.
+For situations where a directory needs to be moved across multiple disks but does not have immediate access to all of them, and continues to grow between syncs.
 
-.vault-config file format:
-{
-  "destinations": {
-    "backup_hdd" : "Vault24",
-    "nas" : "<path_to_backup>"
-  },
-  "files": {
-    "path/to/file": [<synced_destinations>]
-  }
-}
+This tool allows you to track which files have already been copied to each disk, and removes them from the source directory once they have been copied to all specified destinations.
 
-Every destination path must contain a .vault file that specifies its name.
-.vault file format:
-{
-  "name": "backup_hdd"
-}
+## How to Use It
 
-Usage: vault <directory>
+1. Mark your disk as a destination by running `vault device <new_name> <path_to_disk_root>`.
+   - `vault devices` will list the marked destinations that are currently mounted.
+   
+2. Use `vault add <destination> <path_in_destination>` into the moving directory to add a destination.
+   - Run this command for each disk you want to designate as a destination for your files.
+   - `vault info` will display the added destinations.
+   - To remove a disk from the list of destination disks, use `vault remove <destination>`.
+   - Make sure that `<path_in_destination>` exist in the destination disk.
+
+3. Run `vault sync` in the moving directory to sync with the connected destinations.
+   - Once a file has been copied to every specified destination, it will be deleted from the moving directory.

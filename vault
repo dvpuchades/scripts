@@ -20,11 +20,68 @@
 #   "name": "backup_hdd"
 # }
 
-# Usage: vault <directory>
-
 import argparse
 import json
 import os
+import subprocess
+
+def get_devices() -> list:
+  # device format = (<destination_name>, <mount_path>)
+  mounted_disks = os.listdir('/Volumes')
+  available_destinations = []
+  for disk in mounted_disks:
+    try:
+      with open(f'/Volumes/{disk}/.vault', 'r') as file:
+        destination_name = json.load(file)['name']
+        # if destination_name in vault_config['destinations'].keys():
+        #   destination_vault = vault_config['destinations'][destination_name]
+        available_destinations.append(
+          (destination_name, f'/Volumes/{disk}'))
+    except FileNotFoundError:
+      pass
+  return available_destinations
+
+def create_device(path, name):
+  # path should be in /Volumes so that it is a mounted disk
+  try:
+    with open(f'{path}/.vault', 'w') as file:
+      json.dump({'name': name}, file, indent=2)
+  except FileNotFoundError:
+    Exception('Error: Destination not found.')
+
+def print_vault_info():
+  try:
+    with open('.vault-config', 'r') as file:
+      vault_config = json.load(file)
+    print('Destinations:')
+    for destination, path in vault_config['destinations'].items():
+      print(f'  - {destination}: {path}')
+  except FileNotFoundError:
+    print('This directory does not contain a vault.')
+
+def add_destination(name, path):
+  # Load the .vault-config file if it exists
+  try:
+    with open('.vault-config', 'r') as file:
+      vault_config = json.load(file)
+  except FileNotFoundError:
+    vault_config = {'destinations': {}}
+  vault_config['destinations'][name] = path
+  with open('.vault-config', 'w') as file:
+    json.dump(vault_config, file, indent=2)
+  
+def remove_destination(name):
+  # Load the .vault-config file
+  try:
+    with open('.vault-config', 'r') as file:
+      vault_config = json.load(file)
+  except FileNotFoundError:
+    print('Error: .vault-config file not found.')
+    return
+  if name in vault_config['destinations'].keys():
+    del vault_config['destinations'][name]
+  with open('.vault-config', 'w') as file:
+    json.dump(vault_config, file, indent=2)
 
 def backup_vault(directory):
   # Load the .vault-config file
@@ -34,22 +91,14 @@ def backup_vault(directory):
   except FileNotFoundError:
     print('Error: .vault-config file not found.')
     return
-  # Check which destinations are available
-  mounted_disks = os.listdir('/Volumes')
-  available_destinations = []
-  for disk in mounted_disks:
-    try:
-      with open(f'/Volumes/{disk}/.vault', 'r') as file:
-        destination_name = json.load(file)['name']
-        if destination_name in vault_config['destinations'].keys():
-          destination_vault = vault_config['destinations'][destination_name]
-          available_destinations.append(
-            (destination_name, f'/Volumes/{disk}/{destination_vault}'))
-    except FileNotFoundError:
-      pass
-  if not available_destinations:
-    print('Error: No available destinations found.')
-    return
+  all_devices = get_devices()
+  available_destinations = [
+    (destination, f'{mount}/{vault_config["destinations"][destination]}')
+    for destination, mount in all_devices if destination in
+    vault_config['destinations'].keys()]
+  if len(available_destinations) == 0:
+    Exception('Error: No available destinations found.')
+  
   # Get all the files in the directory
 
   def get_files(directory):
@@ -85,12 +134,16 @@ def backup_vault(directory):
       if destination not in synced_destinations:
         new_file = os.path.join(destination_path, file[2:]) # remove './'
         dir_new_file = os.path.dirname(new_file)
-        system_code = os.system(
-          f'mkdir -p {dir_new_file} && cp {file} {new_file}')
-        if system_code != 0:
-          print(f'  - Error: Failed to sync {file}.')
-        else:
+        try:
+          # Create the directory if it does not exist
+          command = ['mkdir', '-p', dir_new_file]
+          subprocess.run(command, check=True)
+          # Copy the file to the destination
+          command = ['cp', file, new_file]
+          subprocess.run(command, check=True)
           tracked_files[file].append(destination)
+        except subprocess.CalledProcessError:
+          print(f'  - Error: Failed to sync {file}.')
     print('  - Up to date.')
     # Dump the updated .vault-config file, just in case of failure
     with open(f'{directory}/.vault-config', 'w') as file:
@@ -101,7 +154,8 @@ def backup_vault(directory):
   for file, synced_destinations in tracked_files.items():
     if set(synced_destinations) == all_destinations:
       # Remove the file if it is synced with all destinations
-      os.system(f'rm {file}')
+      command = ['rm', file]
+      subprocess.run(command, check=True)
       files_to_untrack.append(file)
   for file in files_to_untrack:
     del tracked_files[file]
@@ -113,7 +167,42 @@ def backup_vault(directory):
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='Performs a backup of the specified directory.')
-  parser.add_argument('directory', type=str, help='Directory containing .vault-config file')
+  subparsers = parser.add_subparsers(dest='command')
+  # Usage: vault sync <directory>
+  sync_parser = subparsers.add_parser('sync', help='Syncs the directory with the available destinations.')
+  sync_parser.add_argument('directory', help='The directory to sync.')
+  # Usage: vault devices
+  subparsers.add_parser('devices', help='Lists the available destinations.')
+  # Usage: vault device <name> <path>
+  device_parser = subparsers.add_parser('device', help='Adds a new destination.')
+  device_parser.add_argument('name', help='The name of the destination.')
+  device_parser.add_argument('path', help='The path of the destination. Has to be a mounted disk.')
+  # Usage: vault info
+  subparsers.add_parser('info', help='Prints the .vault-config file.')
+  # Usage: vault add <name> <path>
+  add_parser = subparsers.add_parser('add', help='Adds a destination to the .vault-config file.')
+  add_parser.add_argument('name', help='The name of the destination.')
+  add_parser.add_argument('path', help='Directory to store vault in the destination.')
+  # Usage: vault remove <name>
+  remove_parser = subparsers.add_parser('remove', help='Removes a destination from the .vault-config file.')
+  remove_parser.add_argument('name', help='The name of the destination.')
+
   args = parser.parse_args()
-  directory = args.directory
-  backup_vault(directory)
+  if args.command == 'sync':
+    backup_vault(args.directory)
+  elif args.command == 'devices':
+    devices = get_devices()
+    print('Available destinations:')
+    for device in devices:
+      print(f'  - {device[0]}: {device[1]}')
+  elif args.command == 'device':
+    create_device(args.path, args.name)
+  elif args.command == 'info':
+    print_vault_info()
+  elif args.command == 'add':
+    add_destination(args.name, args.path)
+  elif args.command == 'remove':
+    remove_destination(args.name)
+  else:
+    parser.print_help()
+    exit(1)
