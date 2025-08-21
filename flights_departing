@@ -1,0 +1,65 @@
+from ryanair import Ryanair
+import argparse
+from datetime import datetime
+
+def get_flights(date, origin):
+    api = Ryanair(currency="EUR")
+    # Get cheapest flights from the specified origin for the given date
+    flights = api.get_cheapest_flights(origin, date, date)
+    return flights
+
+def print_flights(flights, date, origin, after_time=None):
+    if not flights:
+        print(f"No flights departing from {origin} on {date}.")
+        return
+    print(f"Flights departing from {origin} on {date}:")
+    for flight in flights:
+        dest = flight.destination
+        dest_full = flight.destinationFull
+        time = flight.departureTime
+        price = flight.price
+        currency = flight.currency
+        # Filter by after_time if specified
+        if after_time:
+            # time can be datetime or string, ensure it's datetime
+            if isinstance(time, str):
+                try:
+                    time_dt = datetime.fromisoformat(time)
+                except Exception:
+                    continue
+            else:
+                time_dt = time
+            if time_dt.time() <= after_time:
+                continue
+        print(f"To {dest} ({dest_full}) at {time} - {price} {currency}")
+
+def main():
+    parser = argparse.ArgumentParser(description="List Ryanair flights departing from a specified airport.")
+    parser.add_argument("--origin", type=str, default="ORK", help="Origin airport IATA code (default: ORK)")
+    parser.add_argument("--date", type=str, help="Date in DD-MM-YYYY format (default: today)")
+    parser.add_argument("--after", type=str, help="Only list flights after this time (HH:MM)")
+    args = parser.parse_args()
+    origin = args.origin.upper()
+    date_input = args.date or datetime.now().strftime("%d-%m-%Y")
+    # Convert DD-MM-YYYY to YYYY-MM-DD for API
+    try:
+        date_obj = datetime.strptime(date_input, "%d-%m-%Y")
+        date_api = date_obj.strftime("%Y-%m-%d")
+    except Exception:
+        print(f"Invalid date format. Use DD-MM-YYYY.")
+        return
+    after_time = None
+    if args.after:
+        try:
+            after_time = datetime.strptime(args.after, "%H:%M").time()
+        except Exception:
+            print(f"Invalid --after time format. Use HH:MM.")
+            return
+    try:
+        flights = get_flights(date_api, origin)
+        print_flights(flights, date_input, origin, after_time=after_time)
+    except Exception as e:
+        print(f"Error fetching flights: {e}")
+
+if __name__ == "__main__":
+  main()

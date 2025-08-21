@@ -1,0 +1,124 @@
+#! /Library/Frameworks/Python.framework/Versions/3.11/bin/python3
+
+from datetime import datetime, timedelta, time
+import argparse
+from ryanair import Ryanair
+
+def get_weekend_dates(base_date=None):
+	"""
+	Returns (friday, saturday, sunday) datetime.date objects for the next weekend.
+	If today is Friday, Saturday, or Sunday, returns this weekend.
+	Otherwise, returns the next weekend.
+	"""
+	today = base_date or datetime.now().date()
+	weekday = today.weekday()  # Monday=0, Sunday=6
+	# Find next Friday
+	days_until_friday = (4 - weekday) % 7
+	friday = today + timedelta(days=days_until_friday)
+	saturday = friday + timedelta(days=1)
+	sunday = friday + timedelta(days=2)
+	return friday, saturday, sunday
+
+def get_flights_for_date(api, origin, date, after=None, before=None):
+	"""
+	Returns flights from origin on date, optionally after/before a certain time.
+	"""
+	flights = api.get_cheapest_flights(origin, date.strftime("%Y-%m-%d"), date.strftime("%Y-%m-%d"))
+	filtered = []
+	for flight in flights:
+		dep_time = flight.departureTime
+		# dep_time can be string or datetime
+		if isinstance(dep_time, str):
+			try:
+				dep_time_dt = datetime.fromisoformat(dep_time)
+			except Exception:
+				continue
+		else:
+			dep_time_dt = dep_time
+		t = dep_time_dt.time()
+		if after and t < after:
+			continue
+		if before and t > before:
+			continue
+		filtered.append(flight)
+	return filtered
+
+def main():
+	parser = argparse.ArgumentParser(description="Find weekend flights from Cork (ORK)")
+	parser.add_argument("--base-date", type=str, help="Base date in DD-MM-YYYY format (default: today)")
+	parser.add_argument("--evening", type=str, default="17:00", help="Earliest time for Friday/Sunday evening flights (default: 17:00)")
+	parser.add_argument("--morning", type=str, default="10:00", help="Latest time for Saturday morning flights (default: 10:00)")
+	args = parser.parse_args()
+
+	if args.base_date:
+		try:
+			base_date = datetime.strptime(args.base_date, "%d-%m-%Y").date()
+		except Exception:
+			print("Invalid base date format. Use DD-MM-YYYY.")
+			return
+	else:
+		base_date = None
+
+	try:
+		evening_time = datetime.strptime(args.evening, "%H:%M").time()
+		morning_time = datetime.strptime(args.morning, "%H:%M").time()
+	except Exception:
+		print("Invalid time format for --evening or --morning. Use HH:MM.")
+		return
+
+	friday, saturday, sunday = get_weekend_dates(base_date)
+	api = Ryanair(currency="EUR")
+	origin = "ORK"
+
+	# Friday evening flights (after evening_time)
+	friday_flights = get_flights_for_date(api, origin, friday, after=evening_time)
+	# Saturday morning flights (before morning_time)
+	saturday_flights = get_flights_for_date(api, origin, saturday, before=morning_time)
+	# Combine outbound flights
+	outbound_flights = friday_flights + saturday_flights
+
+	# For each outbound flight, find a return flight on Sunday evening (after evening_time)
+	results = []
+	for flight in outbound_flights:
+		dest = flight.destination
+		# Find return flights from dest to ORK on Sunday evening
+		return_flights = api.get_cheapest_flights(dest, sunday.strftime("%Y-%m-%d"), sunday.strftime("%Y-%m-%d"))
+		return_flights_evening = []
+		for r in return_flights:
+			dep_time = r.departureTime
+			if isinstance(dep_time, str):
+				try:
+					dep_time_dt = datetime.fromisoformat(dep_time)
+				except Exception:
+					continue
+			else:
+				dep_time_dt = dep_time
+			if dep_time_dt.time() >= evening_time and r.destination == origin:
+				return_flights_evening.append(r)
+		if return_flights_evening:
+			# Take the cheapest return flight
+			return_flights_evening.sort(key=lambda x: x.price)
+			ret = return_flights_evening[0]
+			results.append({
+				"destination": dest,
+				"destinationFull": flight.destinationFull,
+				"outbound_time": flight.departureTime,
+				"outbound_price": flight.price,
+				"return_time": ret.departureTime,
+				"return_price": ret.price,
+				"currency": flight.currency
+			})
+
+	if not results:
+		print("No suitable weekend flights found from Cork (ORK).")
+		return
+
+	print(f"Weekend flights from Cork (ORK) for {friday.strftime('%d-%m-%Y')} to {sunday.strftime('%d-%m-%Y')}:\n")
+	for r in results:
+		print(f"To {r['destination']} ({r['destinationFull']}):")
+		print(f"  Outbound: {r['outbound_time']} - {r['outbound_price']} {r['currency']}")
+		print(f"  Return:   {r['return_time']} - {r['return_price']} {r['currency']}")
+		print()
+
+if __name__ == "__main__":
+	main()
